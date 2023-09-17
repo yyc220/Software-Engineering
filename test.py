@@ -1,4 +1,3 @@
-import tkinter as tk
 from selenium import webdriver
 import time
 from selenium.webdriver.common.by import By
@@ -8,6 +7,17 @@ from bs4 import BeautifulSoup
 import os
 from urllib.request import urlopen
 import re
+import unittest
+from unittest.mock import patch
+from io import StringIO
+
+# 将题目中的特殊符号换成'_'
+def sanitize_filename(filename):
+    # 定义需要替换的特殊字符
+    illegal_chars = r'[\\/:\*\?"<>|]'
+    # 使用下划线替换特殊字符
+    sanitized_filename = re.sub(illegal_chars, '_', filename)
+    return sanitized_filename
 
 def luogu(difficulty,keyword,algorithm,count):
     browser = webdriver.Chrome()  # 创建谷歌浏览器
@@ -27,15 +37,15 @@ def luogu(difficulty,keyword,algorithm,count):
     browser.refresh()
 
     # 创建存储文件夹
-    folder_name = "/软工作业3/luogu_problems"
+    folder_name = "test_folder"
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
 
      # 记录成功爬取的题目数
     success = 0
-
-    # 筛选洛谷的14个页面
-    for i in range(1,15):
+    
+    # 筛选洛谷的179个页面
+    for i in range(1,180):
         url = f'https://www.luogu.com.cn/problem/list?page={i}'
         browser.get(url)
         html  = browser.page_source    
@@ -105,32 +115,29 @@ def luogu(difficulty,keyword,algorithm,count):
 
             ## 存储题目和题解内容为markdown文件
             #获得保存路径
-            prefix_addr = ''
-            if difficulty != '':
-                prefix_addr += '-' + difficulty.replace('/',',')
-            if keyword != '':
-                prefix_addr += '-' + keyword
-            if algorithm_ != [""]:
-                prefix_addr += '-' + '-'.join(algorithm_)
-            if prefix_addr[0] == '-':
-                prefix_addr = prefix_addr[1:]
             
-            problem_id_ = problem_id.replace('/',',')
-            problem_title_ = problem_title.replace('/',',')
-            folder_path = os.path.join(folder_name, f'{prefix_addr}',f'{problem_id_}-{problem_title_}')
+            algorithm_ = '-'.join(algorithm_)
+            prefix_addr = [string for string in [difficulty, keyword, algorithm] if string]  # 过滤掉空串
+            prefix_addr = '-'.join(prefix_addr)
+            prefix_addr = sanitize_filename(prefix_addr)
+            
+            
+            problem_title_ = sanitize_filename(problem_title) # 删掉特殊符号
+            
+            folder_path = folder_name
 
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
             
             # 写入题目
             print(f"正在保存{problem_id}的题目...",end = "")
-            with open(os.path.join(folder_path, f'{problem_id_}-{problem_title_}.md'), 'w', encoding='utf-8') as f:
+            with open(os.path.join(folder_path, f'{problem_id}-{problem_title_}.md'), 'w', encoding='utf-8') as f:
                 f.write(f'# {problem_title}\n\n{problem_content}')
             print("保存成功！")
 
             # 写入题解
             print(f"正在保存{problem_id}的题解...",end = "")
-            with open(os.path.join(folder_path, f'{problem_id_}-{problem_title_}-题解.md'), 'w', encoding='utf-8') as f:
+            with open(os.path.join(folder_path, f'{problem_id}-{problem_title_}-题解.md'), 'w', encoding='utf-8') as f:
                 f.write(f'# {problem_title} - 题解\n\n{solution_content}')
                 
             success += 1    
@@ -142,19 +149,47 @@ def luogu(difficulty,keyword,algorithm,count):
                 # 关闭浏览器
                 browser.quit()
                 return
+    print("没有更多满足条件的题目！")
     browser.quit()
     return
 
-def TestLuogu():
+class TestLuoguFunction(unittest.TestCase):
 
-    level = "普及−"
-    algorithm = "NOIp 提高组"
-    keyword = ""
-    count = 3
-    print(f"爬取洛谷题目难度为{level},算法为{algorithm}的{count}道题目")
-    # 调用被测试的函数
-    luogu(level, keyword, algorithm,count)
+    def setUp(self):
+        # 创建临时文件夹用于保存测试结果
+        self.test_folder = "test_folder"
+        os.makedirs(self.test_folder, exist_ok=True)
+
+    def tearDown(self):
+        # 清除临时文件夹及其内容
+        if os.path.exists(self.test_folder):
+            for root, dirs, files in os.walk(self.test_folder, topdown=False):
+                for name in files:
+                    os.remove(os.path.join(root, name))
+                for name in dirs:
+                    os.rmdir(os.path.join(root, name))
+            os.rmdir(self.test_folder)
+
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_luogu_success(self, mock_stdout):
+        # 构造输入参数
+        difficulty = "入门"
+        keyword = ""
+        algorithm = ""
+        count = 1
+
+        # 调用被测试函数
+        luogu(difficulty, keyword, algorithm, count)
+
+        # 获取函数输出结果
+        output = mock_stdout.getvalue()
+
+        # 检查是否成功保存了1道题目
+        self.assertIn(f"成功保存1道题目", output)
+
+        # 检查是否生成了对应数量的文件
+        self.assertEqual(len(os.listdir(self.test_folder)), count * 2)
 
 
 if __name__ == '__main__':
-    TestLuogu()
+    unittest.main(argv=['first-arg-is-ignored'], exit=False)
